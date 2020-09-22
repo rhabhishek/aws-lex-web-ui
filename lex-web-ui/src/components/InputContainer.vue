@@ -1,22 +1,27 @@
 <template>
-  <v-footer app fixed>
+  <div app fixed>
     <v-layout
       row
       justify-space-between
       ma-0
       class="input-container"
     >
-      <v-toolbar color="white" dense>
+      <v-toolbar
+        color="white"
+        v-bind:dense="this.$store.state.isRunningEmbedded"
+      >
         <!--
           using v-show instead of v-if to make recorder-status transition work
         -->
         <v-text-field
           v-bind:label="textInputPlaceholder"
           v-show="shouldShowTextInput"
+          v-bind:disabled="isLexProcessing"
           v-model="textInput"
           v-on:keyup.enter.stop="postTextMessage"
           v-on:focus="onTextFieldFocus"
           v-on:blur="onTextFieldBlur"
+          ref="textInput"
           id="text-input"
           name="text-input"
           single-line
@@ -31,6 +36,7 @@
         <!-- tooltip should be before btn to avoid right margin issue in mobile -->
         <v-tooltip
           activator=".input-button"
+          content-class="tooltip-custom"
           v-model="shouldShowTooltip"
           ref="tooltip"
           left
@@ -41,10 +47,11 @@
           v-if="shouldShowSendButton"
           v-on:click="postTextMessage"
           v-on="tooltipEventHandlers"
-          v-bind:disabled="isSendButtonDisabled"
+          v-bind:disabled="isLexProcessing"
           ref="send"
-          class="black--text input-button"
+          class="icon-color input-button"
           icon
+          aria-label="Send Message"
         >
           <v-icon medium>send</v-icon>
         </v-btn>
@@ -54,19 +61,19 @@
           v-on="tooltipEventHandlers"
           v-bind:disabled="isMicButtonDisabled"
           ref="mic"
-          class="black--text input-button"
+          class="icon-color input-button"
           icon
         >
           <v-icon medium>{{micButtonIcon}}</v-icon>
         </v-btn>
       </v-toolbar>
     </v-layout>
-  </v-footer>
+  </div>
 </template>
 
 <script>
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at
@@ -105,6 +112,9 @@ export default {
   computed: {
     isBotSpeaking() {
       return this.$store.state.botAudio.isSpeaking;
+    },
+    isLexProcessing() {
+      return this.$store.state.lex.isProcessing;
     },
     isSpeechConversationGoing() {
       return this.$store.state.recState.isConversationGoing;
@@ -181,13 +191,21 @@ export default {
         this.isTextFieldFocused = false;
       }
     },
+    setInputTextFieldFocus() {
+      // focus() needs to be wrapped in setTimeout for IE11
+      setTimeout(() => {
+        if (this.$refs && this.$refs.textInput && this.shouldShowTextInput) {
+          this.$refs.textInput.$refs.input.focus();
+        }
+      }, 10);
+    },
     playInitialInstruction() {
       const isInitialState = ['', 'Fulfilled', 'Failed']
         .some(initialState => (
           this.$store.state.lex.dialogState === initialState
         ));
 
-      return (isInitialState) ?
+      return (this.$store.state.isLoggedIn && isInitialState) ?
         this.$store.dispatch(
           'pollySynthesizeSpeech',
           this.initialSpeechInstruction,
@@ -210,6 +228,9 @@ export default {
       return this.$store.dispatch('postTextMessage', message)
         .then(() => {
           this.textInput = '';
+          if (this.shouldShowTextInput) {
+            this.setInputTextFieldFocus();
+          }
         });
     },
     startSpeechConversation() {
@@ -249,7 +270,7 @@ export default {
 };
 </script>
 <style>
-.footer {
+.input-container {
   /* make footer same height as dense toolbar */
   min-height: 48px;
 }

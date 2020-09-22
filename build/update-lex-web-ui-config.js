@@ -14,13 +14,20 @@ const config = require('../config');
 [
   'AWS_DEFAULT_REGION',
   'BOT_NAME',
+  'BOT_ALIAS',
   'BOT_INITIAL_TEXT',
   'BOT_INITIAL_SPEECH',
   'IFRAME_ORIGIN',
   'PARENT_ORIGIN',
   'POOL_ID',
+  'APP_USER_POOL_CLIENT_ID',
+  'APP_DOMAIN_NAME',
   'UI_TOOLBAR_TITLE',
   'UI_TOOLBAR_LOGO',
+  'NEGATIVE_INTENT',
+  'POSITIVE_INTENT',
+  'HELP_INTENT',
+  'MIN_BUTTON_TOOLTIP_CONTENT',
 ].forEach(function (envVar) {
   console.log('[INFO] Env var - %s: [%s]', envVar, process.env[envVar]);
 });

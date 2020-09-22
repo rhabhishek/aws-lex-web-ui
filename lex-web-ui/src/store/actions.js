@@ -1,5 +1,5 @@
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at
@@ -25,6 +25,8 @@ import silentMp3 from '@/assets/silent.mp3';
 
 import LexClient from '@/lib/lex/client';
 
+const jwt = require('jsonwebtoken');
+
 // non-state variables that may be mutated outside of store
 // set via initializers at run time
 let awsCredentials;
@@ -45,6 +47,9 @@ export default {
     switch (context.state.awsCreds.provider) {
       case 'cognito':
         awsCredentials = credentials;
+        if (lexClient) {
+          lexClient.initCredentials(awsCredentials);
+        }
         return context.dispatch('getCredentials');
       case 'parentWindow':
         return context.dispatch('getCredentials');
@@ -73,10 +78,12 @@ export default {
     context.commit('mergeConfig', configObj);
   },
   initMessageList(context) {
-    context.commit('pushMessage', {
-      type: 'bot',
-      text: context.state.config.lex.initialText,
-    });
+    if (context.state.config.lex.initialText.length > 0) {
+      context.commit('pushMessage', {
+        type: 'bot',
+        text: context.state.config.lex.initialText,
+      });
+    }
   },
   initLexClient(context, lexRuntimeClient) {
     lexClient = new LexClient({
@@ -382,14 +389,18 @@ export default {
    **********************************************************************/
 
   pollyGetBlob(context, text, format = 'text') {
-    const synthReq = pollyClient.synthesizeSpeech({
-      Text: text,
-      VoiceId: context.state.polly.voiceId,
-      OutputFormat: context.state.polly.outputFormat,
-      TextType: format,
-    });
-    return context.dispatch('getCredentials')
-      .then(() => synthReq.promise())
+    return context.dispatch('refreshAuthTokens')
+      .then(() => context.dispatch('getCredentials'))
+      .then((creds) => {
+        pollyClient.config.credentials = creds;
+        const synthReq = pollyClient.synthesizeSpeech({
+          Text: text,
+          VoiceId: context.state.polly.voiceId,
+          OutputFormat: context.state.polly.outputFormat,
+          TextType: format,
+        });
+        return synthReq.promise();
+      })
       .then((data) => {
         const blob = new Blob([data.AudioStream], { type: data.ContentType });
         return Promise.resolve(blob);
@@ -436,21 +447,79 @@ export default {
         });
     });
   },
+  playSound(context, fileUrl) {
+    document.getElementById('sound').innerHTML = `<audio autoplay="autoplay"><source src="${fileUrl}" type="audio/mpeg" /><embed hidden="true" autostart="true" loop="false" src="${fileUrl}" /></audio>`;
+  },
   postTextMessage(context, message) {
+    if (context.state.isSFXOn) {
+      context.dispatch('playSound', context.state.config.ui.messageSentSFX);
+      context.dispatch(
+        'sendMessageToParentWindow',
+        { event: 'messageSent' },
+      );
+    }
     return context.dispatch('interruptSpeechConversation')
       .then(() => context.dispatch('pushMessage', message))
+      .then(() => context.commit('pushUtterance', message.text))
       .then(() => context.dispatch('lexPostText', message.text))
-      .then(response => context.dispatch(
-        'pushMessage',
-        {
-          text: response.message,
-          type: 'bot',
-          dialogState: context.state.lex.dialogState,
-          responseCard: context.state.lex.responseCard,
-          alts: JSON.parse(response.sessionAttributes.appContext || '{}').altMessages,
-        },
-      ))
+      .then((response) => {
+        // check for an array of messages
+        if (response.message && response.message.includes('{"messages":')) {
+          const tmsg = JSON.parse(response.message);
+          if (tmsg && Array.isArray(tmsg.messages)) {
+            tmsg.messages.forEach((mes, index) => {
+              let alts = JSON.parse(response.sessionAttributes.appContext || '{}').altMessages;
+              if (mes.type === 'CustomPayload') {
+                if (alts === undefined) {
+                  alts = {};
+                }
+                alts.markdown = mes.value;
+              }
+              context.dispatch(
+                'pushMessage',
+                {
+                  text: mes.value,
+                  type: 'bot',
+                  dialogState: context.state.lex.dialogState,
+                  responseCard: tmsg.messages.length - 1 === index // attach response card only
+                    ? context.state.lex.responseCard : undefined, // for last response message
+                  alts,
+                },
+              );
+            });
+          }
+        } else {
+          let alts = JSON.parse(response.sessionAttributes.appContext || '{}').altMessages;
+          let responseCardObject = JSON.parse(response.sessionAttributes.appContext || '{}').responseCard;
+          if (response.messageFormat === 'CustomPayload') {
+            if (alts === undefined) {
+              alts = {};
+            }
+            alts.markdown = response.message;
+          }
+          if (responseCardObject === undefined) {
+            responseCardObject = context.state.lex.responseCard;
+          }
+          context.dispatch(
+            'pushMessage',
+            {
+              text: response.message,
+              type: 'bot',
+              dialogState: context.state.lex.dialogState,
+              responseCard: responseCardObject, // prefering appcontext over lex.responsecard
+              alts,
+            },
+          );
+        }
+      })
       .then(() => {
+        if (context.state.isSFXOn) {
+          context.dispatch('playSound', context.state.config.ui.messageReceivedSFX);
+          context.dispatch(
+            'sendMessageToParentWindow',
+            { event: 'messageReceived' },
+          );
+        }
         if (context.state.lex.dialogState === 'Fulfilled') {
           context.dispatch('reInitBot');
         }
@@ -466,11 +535,42 @@ export default {
         );
       });
   },
+  deleteSession(context) {
+    context.commit('setIsLexProcessing', true);
+    return context.dispatch('refreshAuthTokens')
+      .then(() => context.dispatch('getCredentials'))
+      .then(() => lexClient.deleteSession())
+      .then((data) => {
+        context.commit('setIsLexProcessing', false);
+        return context.dispatch('updateLexState', data)
+          .then(() => Promise.resolve(data));
+      })
+      .catch((error) => {
+        console.error(error);
+        context.commit('setIsLexProcessing', false);
+      });
+  },
+  startNewSession(context) {
+    context.commit('setIsLexProcessing', true);
+    return context.dispatch('refreshAuthTokens')
+      .then(() => context.dispatch('getCredentials'))
+      .then(() => lexClient.startNewSession())
+      .then((data) => {
+        context.commit('setIsLexProcessing', false);
+        return context.dispatch('updateLexState', data)
+          .then(() => Promise.resolve(data));
+      })
+      .catch((error) => {
+        console.error(error);
+        context.commit('setIsLexProcessing', false);
+      });
+  },
   lexPostText(context, text) {
     context.commit('setIsLexProcessing', true);
     const session = context.state.lex.sessionAttributes;
     delete session.appContext;
-    return context.dispatch('getCredentials')
+    return context.dispatch('refreshAuthTokens')
+      .then(() => context.dispatch('getCredentials'))
       .then(() => lexClient.postText(text, session))
       .then((data) => {
         context.commit('setIsLexProcessing', false);
@@ -489,7 +589,8 @@ export default {
     console.info('audio blob size:', audioBlob.size);
     let timeStart;
 
-    return context.dispatch('getCredentials')
+    return context.dispatch('refreshAuthTokens')
+      .then(() => context.dispatch('getCredentials'))
       .then(() => {
         timeStart = performance.now();
         return lexClient.postContent(
@@ -596,7 +697,7 @@ export default {
   getCredentialsFromParent(context) {
     const expireTime = (awsCredentials && awsCredentials.expireTime) ?
       awsCredentials.expireTime : 0;
-    const credsExpirationDate = new Date(expireTime);
+    const credsExpirationDate = new Date(expireTime).getTime();
     const now = Date.now();
     if (credsExpirationDate > now) {
       return Promise.resolve(awsCredentials);
@@ -636,6 +737,58 @@ export default {
 
   /***********************************************************************
    *
+   * Auth Token Actions
+   *
+   **********************************************************************/
+
+  refreshAuthTokensFromParent(context) {
+    return context.dispatch('sendMessageToParentWindow', { event: 'refreshAuthTokens' })
+      .then((tokenResponse) => {
+        if (tokenResponse.event === 'resolve' &&
+          tokenResponse.type === 'refreshAuthTokens') {
+          return Promise.resolve(tokenResponse.data);
+        }
+        if (context.state.isRunningEmbedded) {
+          const error = new Error('invalid refresh token event from parent');
+          return Promise.reject(error);
+        }
+        return Promise.resolve('outofbandrefresh');
+      })
+      .then((tokens) => {
+        if (context.state.isRunningEmbedded) {
+          context.commit('setTokens', tokens);
+        }
+        return Promise.resolve();
+      });
+  },
+  refreshAuthTokens(context) {
+    function isExpired(token) {
+      if (token) {
+        const decoded = jwt.decode(token, { complete: true });
+        if (decoded) {
+          const now = Date.now();
+          // calculate and expiration time 5 minutes sooner and adjust to milliseconds
+          // to compare with now.
+          const expiration = (decoded.payload.exp - (5 * 60)) * 1000;
+          if (now > expiration) {
+            return true;
+          }
+          return false;
+        }
+        return false;
+      }
+      return false;
+    }
+
+    if (context.state.tokens.idtokenjwt && isExpired(context.state.tokens.idtokenjwt)) {
+      console.info('starting auth token refresh');
+      return context.dispatch('refreshAuthTokensFromParent');
+    }
+    return Promise.resolve();
+  },
+
+  /***********************************************************************
+   *
    * UI and Parent Communication Actions
    *
    **********************************************************************/
@@ -647,13 +800,45 @@ export default {
       { event: 'toggleMinimizeUi' },
     );
   },
+  toggleIsLoggedIn(context) {
+    context.commit('toggleIsLoggedIn');
+    return context.dispatch(
+      'sendMessageToParentWindow',
+      { event: 'toggleIsLoggedIn' },
+    );
+  },
+  toggleHasButtons(context) {
+    context.commit('toggleHasButtons');
+    return context.dispatch(
+      'sendMessageToParentWindow',
+      { event: 'toggleHasButtons' },
+    );
+  },
+  toggleIsSFXOn(context) {
+    context.commit('toggleIsSFXOn');
+  },
+  /**
+   * sendMessageToParentWindow will either dispatch an event using a CustomEvent to a handler when
+   * the lex-web-ui is running as a VUE component on a page or will send a message via postMessage
+   * to a parent window if an iFrame is hosting the VUE component on a parent page.
+   * isRunningEmbedded === true indicates running withing an iFrame on a parent page
+   * isRunningEmbedded === false indicates running as a VUE component directly on a page.
+   * @param context
+   * @param message
+   * @returns {Promise<any>}
+   */
   sendMessageToParentWindow(context, message) {
     if (!context.state.isRunningEmbedded) {
-      const error = 'sendMessage called when not running embedded';
-      console.warn(error);
-      return Promise.reject(error);
+      return new Promise((resolve, reject) => {
+        try {
+          const myEvent = new CustomEvent('fullpagecomponent', { detail: message });
+          document.dispatchEvent(myEvent);
+          resolve(myEvent);
+        } catch (err) {
+          reject(err);
+        }
+      });
     }
-
     return new Promise((resolve, reject) => {
       const messageChannel = new MessageChannel();
       messageChannel.port1.onmessage = (evt) => {
@@ -667,9 +852,18 @@ export default {
           reject(new Error(errorMessage));
         }
       };
+      let target = context.state.config.ui.parentOrigin;
+      if (target !== window.location.origin) {
+        // simple check to determine if a region specific path has been provided
+        const p1 = context.state.config.ui.parentOrigin.split('.');
+        const p2 = window.location.origin.split('.');
+        if (p1[0] === p2[0]) {
+          target = window.location.origin;
+        }
+      }
       window.parent.postMessage(
         message,
-        context.state.config.ui.parentOrigin,
+        target,
         [messageChannel.port2],
       );
     });

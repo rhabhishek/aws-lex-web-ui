@@ -33,6 +33,36 @@ the application from source. This mode provides finer customization and
 the ability to automatically push your own changes by committing to your
 code repository
 
+### Regions
+The lex-web-ui can be launched into regions other than us-east-1 where Lex, Polly, Cognito, Codebuild are supported. 
+Note that a pre-staged bootstrap S3 bucket is available in us-east-1 (N. Virginia), eu-west-1 (Ireland), 
+and ap-southeast-2 (Sydney). See the
+[blog post](https://aws.amazon.com/blogs/machine-learning/deploy-a-web-ui-for-your-chatbot/) for these links in the Launch section. 
+You can also build your own version and deploy to an S3 bucket you own in a region 
+where you would like to run CloudFormation. Here are the easiest steps to accomplish this.
+
+One required needed to build lex-web-ui version 0.14.13 and higher is python3. The release.sh
+step below will fail until python3 becomes available. The build must now 
+package the python requests module separately and python3 is required to 
+install this module. Cloud9 environments based on Amazon Linux 
+come with python3 support. 
+ 
+* Launch the Cloud9 IDE
+* In your Cloud9 workspace, clone the repository using git
+* cd into the root folder, aws-lex-web-ui
+* npm install
+* cd lex-web-ui
+* npm install
+* cd ../build
+* ./release.sh
+* aws s3 mb s3://[your-lex-bootstrap-bucket-name] --region eu-west-1
+* export BUCKET=[your-lex-bootstrap-bucket-name]
+* ./upload-bootstrap.sh
+ 
+Your bootstrap bucket now contains the necessary files which the CloudFormation template will utilize. When you
+launch your bucket in the target region using the master.yaml, make sure to change the Bootstrap Bucket parameter to
+"[your-lex-bootstrap-bucket-name]" and change the Bootstrap Prefix to be just "artifacts".
+
 ### Launch
 To launch a stack using the CodeBuild Mode (faster and easier), click this button:
 
@@ -62,7 +92,7 @@ and to store build artifacts.
 [Custom Resources](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html)
 to facilitate custom provisioning logic
 - [CloudWatch Logs](http://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html)
-groups automatically created to log the output of Lambda the functions
+groups automatically created to log the output of the Lambda functions
 - Associated [IAM roles](http://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html)
 for the stack resources
 
@@ -86,6 +116,7 @@ the stacks:
 | [master-pipeline.yaml](./master-pipeline.yaml) | This is the master template used to deploy the stack using the Pipeline Mode |
 | [lexbot.yaml](./lexbot.yaml) | Lex bot and associated resources (i.e. intents and slot types). |
 | [cognito.yaml](./cognito.yaml) | Cognito Identity Pool and IAM role for unauthenticated identity access. |
+| [cognitouserpoolconfig.yaml](./cognitouserpoolconfig.yaml) | This template updates the cognito user pool with application client and domain configuration to enable login through either Cognito or other Identity Providers linked via federation. |
 | [codebuild-deploy.yaml](./codebuild-deploy.yaml) | Uses CodeBuild to create a configuration and deploy it along the site to S3. Used in CodeBuild Mode |
 | [coderepo.yaml](./coderepo.yaml) | CodeCommit repo dynamically initialized with the files in this repo using CodeBuild and a custom resource. Used in Pipeline Mode |
 | [pipeline.yaml](./pipeline.yaml) | Continuous deployment pipeline of the Lex Web UI Application using CodePipeline and CodeBuild. The pipeline takes the source from CodeCommit, builds the Lex web UI application using CodeBuild and deploys the app to an S3 bucket. Used in Pipeline Mode |
@@ -103,6 +134,10 @@ with an existing page, you may want to modify the following parameters:
   bot in the Lex
   [Getting Started](http://docs.aws.amazon.com/lex/latest/dg/gs-console.html)
   documentation.
+- `BotAlias`: Lex Bot Alias to use. This parameter defines the alias
+  to be used by the Lex Web UI. It defaults to a value of '$LATEST'. You can set 
+  this attribute to values which have been defined for the bot and are visible in the 
+  Amazon Lex Console. Typical values might be 'PROD' or 'DEV'.
 - `CognitoIdentityPoolId`: Id of an existing Cognito Identity Pool.
   This is an optional parameter. If left empty, a Cognito Identity Pool
   will be automatically created. The pool ID is used by the web ui to
@@ -111,6 +146,11 @@ with an existing page, you may want to modify the following parameters:
   of the parent window. Only needed if you wish to embed the web app
   into an existing site using an iframe. The origin is used to control
   which sites can communicate with the iframe
+- `EnableCognitoLogin`: The ChatBot will provide an optional login menu item 
+  which supports use of Cognito to log in users via the Cognito User Pool,
+  through social media login, or other SAML or OpenID based Identity Providers.
+- `ReInitSessionAttributesOnRestart`: Lex session attributes are reset on new interactions
+with Lex if this parameter is set to true. 
 
 **NOTE**: Some parameters should be unique per AWS region. The parameter
 descriptions specify when that is the case.
@@ -124,6 +164,17 @@ using CloudFormation parameters. This includes the following parameters:
 - `WebAppConfBotInitialSpeech`: Message spoken by bot when the microphone
 is first pressed in a conversation
 - `WebAppConfToolbarTitle`: Title displayed in the chatbot UI toobar
+- `WebAppConfHelp`: String message sent by help button,  If empty icon will not be displayed in chatbot UI toolbar 
+- `WebAppConfNegativeFeedback`: String message sent by the user to signal a negative feedback response if empty icon will not be displayed
+- `WebAppConfPositiveFeedback`: String message sent by the user to signal a positive feedback response if empty icon will not be displayed
+- `EnableMarkdownSupport`: Enables support of Markdown formatting in the UI by 
+bots that provide Markdown formatting in their esponses.
+- `ShouldLoadIframeMinimized`: When set to true and using the lex-web-ui embedded
+in an iframe, the ChatBot Iframe will be minimized when the page is loaded. 
+- `ShowResponseCardTitle`: Lex and Alexa based bots may return ResponseCards. 
+ResponseCards always include a title. If this parameter is set to true, this title
+is rendered in the lex-web-ui. Optionally this can be set to false, and the 
+title is not displayed. This is a global setting. 
 
 ### Output
 Once the CloudFormation stack is successfully launched, the status of

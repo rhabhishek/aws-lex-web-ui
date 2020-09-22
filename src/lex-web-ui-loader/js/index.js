@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -18,8 +18,10 @@
  * Exports the loader classes
  */
 
-// import default config
-// import { configIframe, configFullPage } from './defaults/lex-web-ui';
+// adds polyfills for ie11 compatibility
+import 'core-js/stable';
+import 'regenerator-runtime/runtime';
+
 import { configBase } from './defaults/lex-web-ui';
 import { optionsIframe, optionsFullPage } from './defaults/loader';
 import { dependenciesIframe, dependenciesFullPage } from './defaults/dependencies';
@@ -67,13 +69,14 @@ class Loader {
    *   component configa are loaded
    */
   constructor(options) {
+    const { baseUrl } = options;
     // polyfill needed for IE11
     setCustomEventShim();
     this.options = options;
 
     // append a trailing slash if not present in the baseUrl
     this.options.baseUrl =
-      (this.options.baseUrl && this.options.baseUrl.endsWith('/')) ?
+      (this.options.baseUrl && baseUrl[baseUrl.length - 1] === '/') ?
         this.options.baseUrl : `${this.options.baseUrl}/`;
 
     this.confLoader = new ConfigLoader(this.options);
@@ -156,13 +159,16 @@ export class IframeLoader extends Loader {
   }
 
   load(configParam = {}) {
-    this.config.iframe = this.config.iframe || {};
-    this.config.iframe.iframeSrcPath = this.mergeSrcPath(configParam);
-
     return super.load(configParam)
       .then(() => {
         // assign API to this object to make calls more succint
         this.api = this.compLoader.api;
+        // make sure iframe and iframeSrcPath are set to values if not
+        // configured by standard mechanisms. At this point, default
+        // values from ./defaults/loader.js will be used.
+        this.config.iframe = this.config.iframe || {};
+        this.config.iframe.iframeSrcPath = this.config.iframe.iframeSrcPath ||
+          this.mergeSrcPath(configParam);
       });
   }
 

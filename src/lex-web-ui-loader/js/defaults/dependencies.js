@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -22,7 +22,7 @@ export const dependenciesFullPage = {
   script: [
     {
       name: 'AWS',
-      url: 'https://sdk.amazonaws.com/js/aws-sdk-2.180.0.js',
+      url: 'https://sdk.amazonaws.com/js/aws-sdk-2.671.0.js',
       canUseMin: true,
     },
     {
@@ -78,7 +78,7 @@ export const dependenciesIframe = {
   script: [
     {
       name: 'AWS',
-      url: 'https://sdk.amazonaws.com/js/aws-sdk-2.176.0.js',
+      url: 'https://sdk.amazonaws.com/js/aws-sdk-2.671.0.js',
       canUseMin: true,
     },
     {

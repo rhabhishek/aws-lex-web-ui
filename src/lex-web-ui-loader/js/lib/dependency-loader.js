@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -140,7 +140,7 @@ export class DependencyLoader {
    * Returns a promise that resolves when the dependency is loaded
    */
   static addDependency(useMin = true, baseUrl = '/', type, dependency) {
-    if (!['script', 'css'].includes(type)) {
+    if (['script', 'css'].indexOf(type) === -1) {
       return Promise.reject(new Error(`invalid dependency type: ${type}`));
     }
     if (!dependency || !dependency.name || !dependency.url) {
@@ -163,7 +163,7 @@ export class DependencyLoader {
       DependencyLoader.getMinUrl(dependency.url) : dependency.url;
 
     // add base URL to relative URLs
-    const url = (minUrl.startsWith('http')) ?
+    const url = (minUrl.match('^http')) ?
       minUrl : `${baseUrl}${minUrl}`;
 
     // element id - uses naming convention of <lower case name>-<type>

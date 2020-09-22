@@ -1,14 +1,14 @@
 # Sample Amazon Lex Web Interface
 
-> Sample Amazon Lex Web Interface
+> sample Amazon Lex Web Interface
 
 # Overview
 This is a sample [Amazon Lex](https://aws.amazon.com/lex/)
 web interface. It provides a chatbot UI component that can be integrated
-in your website. The interface allows to interact with a Lex bot directly
+in your website. The interface allows a user to interact with a Lex bot directly
 from a browser using text or voice.
 
-Features include:
+#### Features include:
 - Mobile ready responsive UI with full page or embeddable widget modes
 - Support for voice and text with the ability to seamless switch from
 one mode to the other
@@ -17,6 +17,56 @@ and ability to interrupt responses and replay recordings
 - Display of Lex response cards
 - Ability to programmatically configure and interact with the chatbot
 UI using JavaScript
+
+#### Fixes in version 0.17.2
+- Added option to hide message bubble on button click
+- Resolved current github dependabot security issues
+- Use default encryption for all S3 buckets using AES-256 encryption
+- Added instructions in readme for adding additional vue components 
+
+#### Fixes in version 0.17.1
+- Create uniquely named Cognito UserPool on stack creation
+- Removed display of Back button in title bar and instead provide a replay button using the text from prior 
+message directly in the message bubble. Back button can be re-enabled though configuration json if desired. 
+- Enhanced css attributes of the minimized chatbot button to help allow clicking on items in the parent
+window as well as selecting text next the button. 
+
+#### New Features in version 0.17.0
+- Improved screen reader / accessibility features 
+- Added CloudFormation stack outputs for CloudFront and S3 bucket
+- Use response card defined in session attribute "appContext" over that defined by Lex based response Card
+- lex web ui now supports greater than 5 buttons when response card is defined in session attributes "appcontext"
+- Updated dependent packages in package-lock.json identified by Dependabot security alerts 
+- Resolved additional CloudFront CORS issues
+- See [CHANGELOG](CHANGELOG.md) for additional details
+
+#### New Features in version 0.16.0
+- Lex-web-ui now ships with cloudfront as the default distribution method 
+  * better load times 
+  * non public access to S3 bucket
+  * better future integration to cloudfront features such as WAF and Lambda@Edge
+- Updated package.json dependencies
+
+#### New Features in version 0.15.0
+- Moved to Webpack 4 
+- Changed default parameter ShowResponseCardTitle to be false - was default of true
+- Added back default parameter BotAlias of '$LATEST'. The '$LATEST' 
+alias should only be used for manual testing. Amazon Lex limits
+the number of runtime requests that you can make to the $LATEST version of the bot.
+
+<img src="./img/feedbackButtons.png" width="480">
+
+Toolbar Buttons
+<img src="./img/toolbar.png" width="480">
+- Help Button
+</br>
+Sends a help message to the bot
+- Back Button
+</br>
+Resends the previous message
+
+
+#### Ways the lex-web-ui chatbot can be deployed
 
 It can be used as a full page chatbot UI:
 
@@ -33,9 +83,14 @@ provided by this project. Once you have launched the CloudFormation stack,
 you will get a fully working demo site hosted in your account.
 
 
-Click this button to launch it:
+Click a button to launch it in the desired region
 
-<a target="_blank" href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/new?stackName=lex-web-ui&templateURL=https://s3.amazonaws.com/aws-bigdata-blog/artifacts/aws-lex-web-ui/artifacts/templates/master.yaml"><span><img height="24px" src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/></span></a>
+| Region   |  Launch | 
+|----------|:-------------:|
+| Northern Virginia | <a target="_blank" href="https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://s3.amazonaws.com/aws-bigdata-blog/artifacts/aws-lex-web-ui/artifacts/templates/master.yaml&stackName=lex-web-ui&param_BootstrapBucket=aws-bigdata-blog"><span><img height="24px" src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/></span></a>     |
+| Oregon | <a target="_blank" href="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://s3.amazonaws.com/aws-bigdata-blog-replica-us-west-2/artifacts/aws-lex-web-ui/artifacts/templates/master.yaml&stackName=lex-web-ui&param_BootstrapBucket=aws-bigdata-blog-replica-us-west-2"><span><img height="24px" src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/></span></a> |
+| Ireland | <a target="_blank" href="https://eu-west-1.console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?templateURL=https://s3.amazonaws.com/aws-bigdata-blog-replica-eu-west-1/artifacts/aws-lex-web-ui/artifacts/templates/master.yaml&stackName=lex-web-ui&param_BootstrapBucket=aws-bigdata-blog-replica-eu-west-1"><span><img height="24px" src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/></span></a> |
+| Sydney | <a target="_blank" href="https://ap-southeast-2.console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks/create/review?templateURL=https://s3.amazonaws.com/aws-bigdata-blog-replica-ap-southeast-2/artifacts/aws-lex-web-ui/artifacts/templates/master.yaml&stackName=lex-web-ui&param_BootstrapBucket=aws-bigdata-blog-replica-ap-southeast-2"><span><img height="24px" src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/></span></a> |
 
 By default, the CloudFormation template
 creates a sample Lex bot and a [Amazon Cognito Identity
@@ -173,6 +228,16 @@ In its most simple setup, you can use the loader library like this:
   new ChatBotUiLoader.FullPageLoader().load();
 </script>
 ```
+
+#### Stand-Alone API through the Loader Library
+
+Similar to the iFrame loading technique described later, the 
+FullPageComponentLoader now provides an API allowing a subset of
+events to be sent to the Lex Web UI Component. These events are
+ping and postText. See the [full page](src/README.md#full-page) for 
+description of this API. 
+
+#### Stand-Alone details
 
 For more details and other code examples about using the loader script
 in a full page setup, see the [full page](src/README.md#full-page)
@@ -314,7 +379,7 @@ page](#stand-alone-page) section.
       // as a JSON file or events. The configUrl variable in the
       // loaderOptions above can be used to put these config values in a file
       // instead of explicitly passing it as an argument.
-      var chatbotUiconfig = {
+      var chatbotUiConfig = {
         ui: {
           // origin of the parent site where you are including the chatbot UI
           // set to window.location.origin since hosting on same site
@@ -337,7 +402,7 @@ page](#stand-alone-page) section.
 
       // Call the load function which returns a promise that is resolved
       // once the component is loaded or is rejected if there is an error
-      iframeLoader.load(chabotUiConfig)
+      iframeLoader.load(chatbotUiConfig)
         .then(function () {
           console.log('iframe loaded');
         })
@@ -495,3 +560,4 @@ the files instead of rendering it, you will have to re-sync the files
 to the S3 bucket using the S3 console or aws cli. See the
 [Add Mobile Hub Hosting and Streaming to Your Mobile App](https://docs.aws.amazon.com/mobile-hub/latest/developerguide/add-aws-mobile-hosting-and-streaming.html#add-aws-mobile-hosting-and-streaming-app)
 section of the Mobile Hub documentation for details.
+

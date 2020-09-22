@@ -1,5 +1,5 @@
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at
@@ -266,6 +266,10 @@ export default {
       return;
     }
 
+    // region for lexRuntimeClient and cognito pool are required to be the same.
+    // Use cognito pool-id to adjust the region identified in the config.
+    state.config.region = config.cognito.poolId.split(':')[0] || 'us-east-1';
+
     // security: do not accept dynamic parentOrigin
     const parentOrigin = (
       state.config && state.config.ui &&
@@ -302,6 +306,42 @@ export default {
   toggleIsUiMinimized(state) {
     state.isUiMinimized = !state.isUiMinimized;
   },
+
+  toggleIsSFXOn(state) {
+    state.isSFXOn = !state.isSFXOn;
+  },
+  /**
+   * used to track the appearance of the input container
+   * when the appearance of buttons should hide it
+   */
+  toggleHasButtons(state) {
+    state.hasButtons = !state.hasButtons;
+  },
+  /**
+   * used to track the expand/minimize status of the window when
+   * running embedded in an iframe
+   */
+  setIsLoggedIn(state, bool) {
+    state.isLoggedIn = bool;
+  },
+
+  /**
+   * Update tokens from cognito authentication
+   * @param state
+   * @param tokens
+   */
+  setTokens(state, tokens) {
+    if (tokens) {
+      state.tokens.idtokenjwt = tokens.idtokenjwt;
+      state.tokens.accesstokenjwt = tokens.accesstokenjwt;
+      state.tokens.refreshtoken = tokens.refreshtoken;
+      state.lex.sessionAttributes.idtokenjwt = tokens.idtokenjwt;
+      state.lex.sessionAttributes.accesstokenjwt = tokens.accesstokenjwt;
+      state.lex.sessionAttributes.refreshtoken = tokens.refreshtoken;
+    } else {
+      state.tokens = undefined;
+    }
+  },
   /**
    * Push new message into messages array
    */
@@ -317,5 +357,28 @@ export default {
    */
   setAwsCredsProvider(state, provider) {
     state.awsCreds.provider = provider;
+  },
+  /**
+   * Push a user's utterance onto the utterance stack to be used with back functionality
+   */
+  pushUtterance(state, utterance) {
+    if (!state.isBackProcessing) {
+      state.utteranceStack.push({
+        t: utterance,
+      });
+      // max of 1000 utterances allowed in the stack
+      if (state.utteranceStack.length > 1000) {
+        state.utteranceStack.shift();
+      }
+    } else {
+      state.isBackProcessing = !state.isBackProcessing;
+    }
+  },
+  popUtterance(state) {
+    if (state.utteranceStack.length === 0) return;
+    state.utteranceStack.pop();
+  },
+  toggleBackProcessing(state) {
+    state.isBackProcessing = !state.isBackProcessing;
   },
 };

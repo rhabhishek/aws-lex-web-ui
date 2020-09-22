@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -47,7 +47,7 @@ export class ConfigLoader {
       .then(() => {
         if (this.options.shouldLoadConfigFromJsonFile) {
           // append baseUrl to config if it's relative
-          const url = (this.options.configUrl.startsWith('http')) ?
+          const url = (this.options.configUrl.match('^http')) ?
             this.options.configUrl :
             `${this.options.baseUrl}${this.options.configUrl}`;
           return ConfigLoader.loadJsonFile(url);
@@ -203,12 +203,18 @@ export class ConfigLoader {
   filterConfigWhenEmedded(config) {
     const url = window.location.href;
     // when shouldIgnoreConfigEmbedded is true
-    // ignore most of the config with the exception of the parentOrigin
+    // ignore most of the config with the exception of the parentOrigin and region
     const parentOrigin = config.ui && config.ui.parentOrigin;
-    return (this.options &&
+    if (this.options &&
       this.options.shouldIgnoreConfigWhenEmbedded &&
-      url.includes('lexWebUiEmbed=true')) ?
-      { ui: { parentOrigin } } : config;
+      url.indexOf('lexWebUiEmbed=true') !== -1) {
+      return {
+        ui: { parentOrigin },
+        region: config.region,
+        cognito: { region: config.cognito.region },
+      };
+    }
+    return config;
   }
 
   /**

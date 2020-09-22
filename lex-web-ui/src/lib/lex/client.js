@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -40,6 +40,31 @@ export default class {
     this.userId = (credentials.identityId) ?
       credentials.identityId :
       this.userId;
+  }
+
+  deleteSession() {
+    const deleteSessionReq = this.lexRuntimeClient.deleteSession({
+      botAlias: this.botAlias,
+      botName: this.botName,
+      userId: this.userId,
+    });
+    return this.credentials.getPromise()
+      .then(creds => creds && this.initCredentials(creds))
+      .then(() => deleteSessionReq.promise());
+  }
+
+  startNewSession() {
+    const putSessionReq = this.lexRuntimeClient.putSession({
+      botAlias: this.botAlias,
+      botName: this.botName,
+      userId: this.userId,
+      dialogAction: {
+        type: 'ElicitIntent',
+      },
+    });
+    return this.credentials.getPromise()
+      .then(creds => creds && this.initCredentials(creds))
+      .then(() => putSessionReq.promise());
   }
 
   postText(inputText, sessionAttributes = {}) {

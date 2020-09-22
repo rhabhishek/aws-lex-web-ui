@@ -9,13 +9,17 @@ BOOTSTRAP_BUCKET_PATH="${BUCKET}/artifacts"
   exit 1
 }
 
+if ! test -d out; then
+mkdir out
+fi
+
 # assumes that it is running from build dir
-rm -f out/*.zip
+rm -f out/src.zip
+# no longer removes custom-resources.zip - this is created in build using ./release.sh as a required step
+
 pushd .
 cd ..
 git ls-files | xargs zip -u build/out/src.zip
-git ls-files templates/custom-resources | \
-    xargs zip -u -j build/out/custom-resources.zip
 popd
 aws s3 cp --acl public-read out/src.zip \
   "s3://${BOOTSTRAP_BUCKET_PATH}/src.zip"

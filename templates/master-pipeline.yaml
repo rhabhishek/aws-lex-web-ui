@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: |
-    Master Pipeline Lex Web UI CloudFormation template.
+    Master Pipeline Lex Web UI CloudFormation template (v0.17.2)
     It deploys:
         - S3 buckets to host the web application
         - CodeBuild project to build the configuration and deploy to S3
@@ -105,6 +105,16 @@ Parameters:
         AllowedPattern: '(^$|^https?://[\w\.-]+(:\d+)?$)'
         ConstraintDescription: Empty or valid browser origin
 
+    WebAppPath:
+        Type: String
+        Default: '/parent.html'
+        Description: >
+            Path to the page hosting the sample WebApp. This parameter defaults
+            to parent.html which is used by the sample app created when hosting the
+            bot in a separate iframe. This path should be updated to reflect the
+            path to the default (home) page used by the WebAppParentOrigin.
+            This may be /index.html rather than the default.
+
     CognitoIdentityPoolId:
         Type: String
         Description: >
@@ -154,6 +164,29 @@ Parameters:
         Description: >
             S3 prefix where the templates and source are stored under
 
+    WebAppConfNegativeFeedback:
+        Type: String
+        Default: Thumbs down
+        Description: >
+            This optional parameter defines the message to be sent by the user upon pressing
+            a feedback button signaling a negative feedback.
+            If left empty feedback buttons will be disabled on the UI.
+
+    WebAppConfPositiveFeedback:
+        Type: String
+        Default: Thumbs up
+        Description: >
+            This optional parameter defines the message to be sent by the user upon pressing
+            a feedback button signaling a positive feedback.
+            If left empty feedback buttons will be disabled on the UI.
+
+    WebAppConfHelp:
+        Type: String
+        Default: Help
+        Description: >
+            This is an optional parameter, when defined with a value, a help button will display on the chat bot toolbar.
+            When pressed the button will send the entered string to the bot as a help message.  If left empty
+            the help button will be disabled.
 Metadata:
     AWS::CloudFormation::Interface:
         ParameterGroups:
@@ -181,6 +214,10 @@ Metadata:
                 default: Web Application Parameters
               Parameters:
                   - WebAppParentOrigin
+                  - WebAppPath
+                  - WebAppConfNegativeFeedback
+                  - WebAppConfPositiveFeedback
+                  - WebAppConfHelp
 
 Conditions:
     NeedsBot: !Equals [!Ref BotName, '']
@@ -193,7 +230,7 @@ Resources:
         Condition: NeedsBot
         Properties:
             TimeoutInMinutes: 15
-            TemplateURL: !Sub "https://s3.amazonaws.com/${BootstrapBucket}/${BootstrapPrefix}/templates/lexbot.yaml"
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/lexbot.yaml"
             Parameters:
                 NamePrefix: !Ref BotNamePrefix
                 ShouldDeleteBot: !Ref ShouldDeleteBot
@@ -204,7 +241,7 @@ Resources:
         Type: AWS::CloudFormation::Stack
         Condition: NeedsCognito
         Properties:
-            TemplateURL: !Sub "https://s3.amazonaws.com/${BootstrapBucket}/${BootstrapPrefix}/templates/cognito.yaml"
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/cognito.yaml"
             Parameters:
                 CognitoIdentityPoolName: !Ref CognitoIdentityPoolName
                 LexBotName:
@@ -220,7 +257,7 @@ Resources:
         Type: AWS::CloudFormation::Stack
         Properties:
             TimeoutInMinutes: 15
-            TemplateURL: !Sub "https://s3.amazonaws.com/${BootstrapBucket}/${BootstrapPrefix}/templates/coderepo.yaml"
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/coderepo.yaml"
             Parameters:
                 BotName:
                     !If
@@ -241,7 +278,7 @@ Resources:
     Pipeline:
         Type: AWS::CloudFormation::Stack
         Properties:
-            TemplateURL: !Sub "https://s3.amazonaws.com/${BootstrapBucket}/${BootstrapPrefix}/templates/pipeline.yaml"
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/pipeline.yaml"
             Parameters:
                 BotName:
                     !If
@@ -260,6 +297,24 @@ Resources:
                 CustomResourceCodeBucket: !Ref BootstrapBucket
                 CustomResourceCodeObject: !Sub "${BootstrapPrefix}/custom-resources.zip"
                 CleanupBuckets: !Ref CleanupBuckets
+                CognitoAppUserPoolClientId: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolClientId
+                CognitoUserPoolId: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolId
+                WebAppConfNegativeFeedback: !Ref WebAppConfNegativeFeedback
+                WebAppConfPositiveFeedback: !Ref WebAppConfPositiveFeedback
+                WebAppConfHelp: !Ref WebAppConfHelp
+
+    CognitoIdentityPoolConfig:
+        Type: AWS::CloudFormation::Stack
+        Condition: NeedsCognito
+        Properties:
+            TemplateURL: !Sub "https://${BootstrapBucket}.s3.${AWS::Region}.amazonaws.com/${BootstrapPrefix}/templates/cognitouserpoolconfig.yaml"
+            Parameters:
+                WebAppUrl: !If [NeedsParentOrigin, !GetAtt Pipeline.Outputs.WebAppBase, !Ref WebAppParentOrigin]
+                WebAppPath: !Ref WebAppPath
+                CodeBuildProjectName: !Ref CodeBuildName
+                CognitoUserPool: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolId
+                CognitoUserPoolClient: !GetAtt CognitoIdentityPool.Outputs.CognitoUserPoolClientId
+
 
 Outputs:
     BotName:

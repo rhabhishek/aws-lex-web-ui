@@ -1,5 +1,5 @@
 <template>
-  <v-flex d-flex class="message message-bot">
+  <div class="flex message d-flex message-bot" aria-hidden="true">
     <!-- contains message and response card -->
     <v-layout column ma-2 class="message-layout">
 
@@ -11,21 +11,22 @@
           <v-flex d-flex class="message-bubble-avatar-container">
             <v-layout row class="message-bubble-row">
               <div
-                class="message-bubble focusable"
+                class="message-bubble"
+                aria-hidden="true"
               >
-                {{ progress }} 
+                {{ progress }}
               </div>
             </v-layout>
           </v-flex>
         </v-layout>
       </v-flex>
     </v-layout>
-  </v-flex>
+  </div>
 </template>
 
 <script>
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at

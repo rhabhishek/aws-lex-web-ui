@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -11,10 +11,11 @@
  License for the specific language governing permissions and limitations under the License.
  */
 
-/* eslint no-console: ["error", { allow: ["warn", "error"] }] */
+/* eslint no-console: ["error", { allow: ["warn", "error", "debug"] }] */
 /* global AWS */
 
 import { ConfigLoader } from './config-loader';
+import { logout, login, completeLogin, completeLogout, getAuth, refreshLogin, isTokenExpired } from './loginutil';
 
 /**
  * Instantiates and mounts the chatbot component in an iframe
@@ -61,6 +62,9 @@ export class IframeComponentLoader {
       this.config.iframe.iframeOrigin =
         this.config.parentOrigin || window.location.origin;
     }
+    if (iframeConfig.shouldLoadIframeMinimized === undefined) {
+      this.config.iframe.shouldLoadIframeMinimized = true;
+    }
     // assign parentOrigin if not found in config
     if (!(this.config.parentOrigin)) {
       this.config.parentOrigin =
@@ -102,6 +106,11 @@ export class IframeComponentLoader {
       console.error('missing parentOrigin config field');
       return false;
     }
+    if (!('shouldLoadIframeMinimized' in iframeConfig)) {
+      console.error('missing shouldLoadIframeMinimized config field');
+      return false;
+    }
+
     return true;
   }
 
@@ -117,6 +126,8 @@ export class IframeComponentLoader {
       let containerEl = document.getElementById(this.elementId);
       if (containerEl) {
         console.warn('chatbot iframe container already exists');
+        /* place the chatbot to the already available element */
+        this.containerElement = containerEl;
         return resolve(containerEl);
       }
       try {
@@ -134,16 +145,106 @@ export class IframeComponentLoader {
     });
   }
 
+  generateConfigObj() {
+    const config = {
+      appUserPoolClientId: this.config.cognito.appUserPoolClientId,
+      appDomainName: this.config.cognito.appDomainName,
+      appUserPoolIdentityProvider: this.config.cognito.appUserPoolIdentityProvider,
+    };
+    return config;
+  }
+
   /**
-   * Creates Cognito credentials
-   * Inits this.credentials
+   * Updates AWS credentials used to call AWS services based on login having completed. This is
+   * event driven from loginuti.js. Credentials are obtained from the parent page on each
+   * request in the Vue component.
    */
-  initCognitoCredentials() {
+  updateCredentials() {
+    const { poolId: cognitoPoolId } =
+      this.config.cognito;
+    const region =
+      this.config.cognito.region || this.config.region || this.config.cognito.poolId.split(':')[0] || 'us-east-1';
+    const poolName = `cognito-idp.${region}.amazonaws.com/${this.config.cognito.appUserPoolName}`;
+    let credentials;
+    const idtoken = localStorage.getItem('idtokenjwt');
+    if (idtoken) { // auth role since logged in
+      try {
+        const logins = {};
+        logins[poolName] = idtoken;
+        credentials = new AWS.CognitoIdentityCredentials(
+          { IdentityPoolId: cognitoPoolId, Logins: logins },
+          { region },
+        );
+      } catch (err) {
+        console.error(new Error(`cognito auth credentials could not be created ${err}`));
+      }
+    } else { // noauth role
+      try {
+        credentials = new AWS.CognitoIdentityCredentials(
+          { IdentityPoolId: cognitoPoolId },
+          { region },
+        );
+      } catch (err) {
+        console.error(new Error(`cognito noauth credentials could not be created ${err}`));
+      }
+    }
+    const self = this;
+    credentials.getPromise()
+      .then(() => {
+        self.credentials = credentials;
+      });
+  }
+
+  validateIdToken() {
     return new Promise((resolve, reject) => {
-      const { poolId: cognitoPoolId } =
-        this.config.cognito;
+      let idToken = localStorage.getItem('idtokenjwt');
+      if (isTokenExpired(idToken)) {
+        const refToken = localStorage.getItem('refreshtoken');
+        if (refToken && !isTokenExpired(refToken)) {
+          refreshLogin(this.generateConfigObj(), refToken, (refSession) => {
+            if (refSession.isValid()) {
+              idToken = localStorage.getItem('idtokenjwt');
+              resolve(idToken);
+            } else {
+              reject(new Error('failed to refresh tokens'));
+            }
+          });
+        } else {
+          reject(new Error('token could not be refreshed'));
+        }
+      } else {
+        resolve(idToken);
+      }
+    });
+  }
+
+  /**
+   * Creates Cognito credentials and processes Cognito login if complete
+   * Inits AWS credentials. Note that this function calls history.replaceState
+   * to remove code grants that appear on the url returned from cognito
+   * hosted login. The site does not want to allow the user to attempt to
+   * refresh the page using old code grants.
+   */
+  /* eslint-disable no-restricted-globals */
+  initCognitoCredentials() {
+    document.addEventListener('tokensavailable', this.updateCredentials.bind(this), false);
+    return new Promise((resolve, reject) => {
+      const curUrl = window.location.href;
+      if (curUrl.indexOf('loggedin') >= 0) {
+        if (completeLogin(this.generateConfigObj())) {
+          history.replaceState(null, '', window.location.pathname);
+          console.debug('completeLogin successful');
+        }
+      } else if (curUrl.indexOf('loggedout') >= 0) {
+        if (completeLogout(this.generateConfigObj())) {
+          history.replaceState(null, '', window.location.pathname);
+          console.debug('completeLogout successful');
+        }
+      }
+      const { poolId: cognitoPoolId } = this.config.cognito;
       const region =
-        this.config.cognito.region || this.config.region || 'us-east-1';
+          this.config.cognito.region || this.config.region || this.config.cognito.poolId.split(':')[0] || 'us-east-1';
+      const poolName = `cognito-idp.${region}.amazonaws.com/${this.config.cognito.appUserPoolName}`;
       if (!cognitoPoolId) {
         return reject(new Error('missing cognito poolId config'));
       }
@@ -155,19 +256,39 @@ export class IframeComponentLoader {
       }
 
       let credentials;
-      try {
-        credentials = new AWS.CognitoIdentityCredentials(
-          { IdentityPoolId: cognitoPoolId },
-          { region },
-        );
-      } catch (err) {
-        reject(new Error(`cognito credentials could not be created ${err}`));
+      const token = localStorage.getItem('idtokenjwt');
+      if (token) { // auth role since logged in
+        return this.validateIdToken().then((idToken) => {
+          const logins = {};
+          logins[poolName] = idToken;
+          credentials = new AWS.CognitoIdentityCredentials(
+            { IdentityPoolId: cognitoPoolId, Logins: logins },
+            { region },
+          );
+          const self = this;
+          return credentials.getPromise()
+            .then(() => {
+              self.credentials = credentials;
+              resolve();
+            });
+        }, (unable) => {
+          console.error(`No longer able to use refresh tokens to login: ${unable}`);
+          // attempt logout as unable to login again
+          logout(this.generateConfigObj());
+          reject(unable);
+        });
       }
-
-      // get and assign credentials
+      credentials = new AWS.CognitoIdentityCredentials(
+        { IdentityPoolId: cognitoPoolId },
+        { region },
+      );
+      if (this.config.ui.enableLogin) {
+        credentials.clearCachedId();
+      }
+      const self = this;
       return credentials.getPromise()
         .then(() => {
-          this.credentials = credentials;
+          self.credentials = credentials;
           resolve();
         });
     });
@@ -347,6 +468,36 @@ export class IframeComponentLoader {
         if (this.isChatBotReady) {
           clearTimeout(readyManager.timeoutId);
           clearInterval(readyManager.intervalId);
+          if (this.config.ui.enableLogin && this.config.ui.enableLogin === true) {
+            const auth = getAuth(this.generateConfigObj());
+            const session = auth.getSignInUserSession();
+            if (session.isValid()) {
+              const tokens = {};
+              tokens.idtokenjwt = localStorage.getItem('idtokenjwt');
+              tokens.accesstokenjwt = localStorage.getItem('accesstokenjwt');
+              tokens.refreshtoken = localStorage.getItem('refreshtoken');
+              this.sendMessageToIframe({
+                event: 'confirmLogin',
+                data: tokens,
+              });
+            } else {
+              const refToken = localStorage.getItem('refreshtoken');
+              if (refToken) {
+                refreshLogin(this.generateConfigObj(), refToken, (refSession) => {
+                  if (refSession.isValid()) {
+                    const tokens = {};
+                    tokens.idtokenjwt = localStorage.getItem('idtokenjwt');
+                    tokens.accesstokenjwt = localStorage.getItem('accesstokenjwt');
+                    tokens.refreshtoken = localStorage.getItem('refreshtoken');
+                    this.sendMessageToIframe({
+                      event: 'confirmLogin',
+                      data: tokens,
+                    });
+                  }
+                });
+              }
+            }
+          }
           resolve();
         }
       };
@@ -392,13 +543,14 @@ export class IframeComponentLoader {
       // requests credentials from the parent
       getCredentials(evt) {
         return this.getCredentials()
-          .then(creds => (
+          .then((creds) => {
+            const tcreds = JSON.parse(JSON.stringify(creds));
             evt.ports[0].postMessage({
               event: 'resolve',
               type: evt.data.event,
-              data: creds,
-            })
-          ))
+              data: tcreds,
+            });
+          })
           .catch((error) => {
             console.error('failed to get credentials', error);
             evt.ports[0].postMessage({
@@ -434,6 +586,51 @@ export class IframeComponentLoader {
           });
       },
 
+      // sent when login is requested from iframe
+      requestLogin(evt) {
+        evt.ports[0].postMessage({ event: 'resolve', type: evt.data.event });
+        login(this.generateConfigObj());
+      },
+
+      // sent when logout is requested from iframe
+      requestLogout(evt) {
+        logout(this.generateConfigObj());
+        evt.ports[0].postMessage({ event: 'resolve', type: evt.data.event });
+        this.sendMessageToIframe({ event: 'confirmLogout' });
+      },
+
+      // sent to refresh auth tokens as requested by iframe
+      refreshAuthTokens(evt) {
+        const refToken = localStorage.getItem('refreshtoken');
+        if (refToken) {
+          refreshLogin(this.generateConfigObj(), refToken, (refSession) => {
+            if (refSession.isValid()) {
+              const tokens = {};
+              tokens.idtokenjwt = localStorage.getItem('idtokenjwt');
+              tokens.accesstokenjwt = localStorage.getItem('accesstokenjwt');
+              tokens.refreshtoken = localStorage.getItem('refreshtoken');
+              evt.ports[0].postMessage({
+                event: 'resolve',
+                type: evt.data.event,
+                data: tokens,
+              });
+            } else {
+              console.error('failed to refresh credentials');
+              evt.ports[0].postMessage({
+                event: 'reject',
+                type: evt.data.event,
+                error: 'failed to refresh tokens',
+              });
+            }
+          });
+        } else {
+          evt.ports[0].postMessage({
+            event: 'reject',
+            type: evt.data.event,
+            error: 'no refresh token available for use',
+          });
+        }
+      },
       // iframe sends Lex updates based on Lex API responses
       updateLexState(evt) {
         // evt.data will contain the Lex state
@@ -500,6 +697,11 @@ export class IframeComponentLoader {
   toggleMinimizeUiClass() {
     try {
       this.containerElement.classList.toggle(`${this.containerClass}--minimize`);
+      if (this.containerElement.classList.contains(`${this.containerClass}--minimize`)) {
+        localStorage.setItem('lastUiIsMinimized', 'true');
+      } else {
+        localStorage.setItem('lastUiIsMinimized', 'false');
+      }
       return Promise.resolve();
     } catch (err) {
       return Promise.reject(new Error(`failed to toggle minimize UI ${err}`));
@@ -511,12 +713,16 @@ export class IframeComponentLoader {
    */
   showIframe() {
     return Promise.resolve()
-      .then(() => (
-        // start minimized if configured accordingly
-        (this.config.iframe.shouldLoadIframeMinimized) ?
-          this.api.toggleMinimizeUi() :
-          Promise.resolve()
-      ))
+      .then(() => {
+        // check for last state and resume with this configuration
+        if (localStorage.getItem('lastUiIsMinimized') && localStorage.getItem('lastUiIsMinimized') === 'true') {
+          this.api.toggleMinimizeUi();
+        } else if (localStorage.getItem('lastUiIsMinimized') && localStorage.getItem('lastUiIsMinimized') === 'false') {
+          this.api.ping();
+        } else if (this.config.iframe.shouldLoadIframeMinimized) {
+          this.api.toggleMinimizeUi();
+        }
+      })
       // display UI
       .then(() => this.toggleShowUiClass());
   }
@@ -550,6 +756,12 @@ export class IframeComponentLoader {
       ),
       postText: message => (
         this.sendMessageToIframe({ event: 'postText', message })
+      ),
+      deleteSession: () => (
+        this.sendMessageToIframe({ event: 'deleteSession' })
+      ),
+      startNewSession: () => (
+        this.sendMessageToIframe({ event: 'startNewSession' })
       ),
     };
 

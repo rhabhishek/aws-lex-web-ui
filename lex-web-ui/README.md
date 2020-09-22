@@ -16,7 +16,8 @@ user's browser using temporary credentials obtained from [Amazon
 Cognito](https://aws.amazon.com/cognito/). This allows the chatbot web app
 to be served from S3 or CloudFront in a scalable serverless architecture.
 Here is a diagram of how the application works:
-<img src="../img/webapp-diagram.png" width=480>
+
+![](../img/webapp-diagram.png)
 
 ### Dependencies
 The chatbot web app is built using the [Vue.js](https://vuejs.org/)
@@ -32,7 +33,7 @@ It adds a property named `$lexWebUi` to the Vue class and registers
 a global Vue component name `LexWebUi`.
 
 You can import the library as a module and use it in your code:
-```JavaScript
+```
   // dependencies
   import Vue from 'vue';
   import Vuex from 'vuex';
@@ -53,6 +54,7 @@ You can import the library as a module and use it in your code:
     lex: {
       initialText: 'How can I help you?',
       botName: 'helpBot',
+      botAlias: '$LATEST',
     },
     ui: {
       toolbarTitle: 'Help Bot',
@@ -90,8 +92,11 @@ You can import the library as a module and use it in your code:
 ```
 
 Alternatively, for finer control, you can use the Vue plugin directly
-in your application:
-```JavaScript
+in your application as show below. Note as of verion 0.14.5, the lexRuntimeClient will
+be dynamically reinitialized using the region configured or specified in the cognito poolId. 
+Make sure that the Cognito Identity Pool is provisioned in the same region as the LexBot.
+Mixing regions is not supported.
+```
   import Vue from 'vue';
   import Vuex from 'vuex';
   import Vuetify from 'vuetify';
@@ -145,19 +150,163 @@ in your application:
     @import 'node_modules/aws-lex-web-ui/dist/lex-web-ui.css';
   */
 ```
+#### Adding New Dependencies
+To add new dependencies you will need to add them to the lex-web-ui Vue plugin.  This can be done in 'lex-web-ui/lex-web-ui.js'. By adding them via the VueConstructor.  For example to add a depency such as [VueMask](https://www.npmjs.com/package/v-mask) From within the 'lex-web-ui' directory npm install v-mask.  Then ```import VueMask from 'v-mask'``` finally at the bottom of the file add ```VueConstructor.use(VueMask)```.  Now VueMask will be available throughout the entire UI.
 
 ## Credential Management
 This sample application uses [Amazon
 Cognito](https://aws.amazon.com/cognito/) to provide temporary AWS
-credentials for use with the Lex and Polly services.
+credentials for use with the Lex and Polly services. The sample application also
+uses Cognito for user sign-up, sign-in, and access control when Cognito Login Support
+is enabled. 
+
+Amazon Cognito provides authentication, authorization, and user management for the sample
+Lex Web Ui provided by this project. Users can sign in directly with a user name and 
+password, or through a third party such as Facebook, Amazon, or Google depending on how
+you ultimately configure use of Amazon Cognito.
 
 The accompanying CloudFormation stack in this project, automatically
 creates a
-[Cognito Identity Pool](http://docs.aws.amazon.com/cognito/latest/developerguide/identity-pools.html)
-for you. If you want to manually use your own Cognito Identity Pool,
-you will need to link a role to it. The associated role should
+[Cognito Identity Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/identity-pools.html)
+for you.
+
+You can optionally Authentication Providers such as Amazon, Google, Facebook by 
+editing the Identity Pool configuration. Be sure to follow the guidelines for
+each provider.
+
+It is important to note that the CloudFormation stack **automatically creates** a
+[Cognito User Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html)
+for you as well and associates the user pool with the Cognito Identity Pool as an
+Authentication Provider.
+
+### Cognito Login Support ###
+
+Since a Cognito User Pool is now created by default, you can easily enable Login in the
+Lex Web UI. This can be enabled in one of two ways.
+
+- During deployment of the CloudFormation template. Set the EnableCognitoLogin 
+parameter to true.
+
+
+- Post deployment by editing the lex-web-ui-loader-config.json file. Set the ui configuration
+value 
+
+```
+"ui": {
+    ...
+    "enableLogin": true,
+    ...
+}
+
+```
+
+This enables the menu icon in the toolbar area with a single menu item that toggles 
+between "Login" or "Logout" depending on whether the user has successfully logged in. 
+In the default configuration, users can register a new account with the
+Cognito User Pool and then sign-in from this user pool. The User Pool
+should be customized going forward with appropriate images and 
+styling to fit your web site.
+
+Alternatively, if other social media sign-ins are enabled in the
+IdentityPool, users can sign-in using these providers. 
+
+Once signed in, three tokens are managed by the lex-web-ui and provided on requests
+to Lex. These are the accesstoken, the idtoken, and a refreshtoken. These tokens 
+are passed as Lex session attributes on each request to Lex.
+
+Configured Fulfillment lambda handlers can utilize these
+tokens by accessing them from session attributes. They can be used to
+validate access or lookup attributes / assertions from the SSO provider. 
+
+The session attributes are
+
+* session.accesstokenjwt
+* session.idtokenjwt
+* session.refreshtokenjwt
+
+The Lex Web UI initially will use the unauth role until a user logs in. 
+After login processing fully completes, an event fires in the browser indicating tokens 
+are now available. At that time, the Lex Web UI will switch to using auth based role by 
+using new temporary credentials.
+
+### Adjusting existing Identity Pools to be used with the lex-web-ui
+
+If you want to manually use your own Cognito Identity Pool,
+you will need to perform additional setup of resources or ensure the following 
+resources have been defined and configured. 
+
+The resources below are configured automatically by the
+CloudFormation stack when a new identity pool is being created. They are not
+provisioned when using an existing Identity Pool. 
+
+#### Roles
+Make sure two roles (Unauthenticated and Authenticated) are configured for the
+IdentityPool. The Unauthenticated role should
 allow access to the Lex PostText/PostContent API calls and Polly
-SynthesizeSpeech.
+SynthesizeSpeech. If Cognito Login is enabled for the Lex Web UI, the
+Authenticated role should be created and should allow access to the 
+Lex PostText/PostContent API actions and the Polly SynthesizeSpeech action. Other 
+services and actions can be enabled as needed. 
+
+#### Cognito User Pool
+
+1. Make sure a Cognito User Pool is created. It should be defined with the following 
+required attributes: given_name, family_name, preferred_username, and email.
+
+* Note this is a ten step process to click through and build up a cognito user pool.
+The configuration steps are highlighted in the [flow of configuration screens](./READMECONFIGSCREENS.md) using
+the Amazon Cognito Console. 
+
+2. A User Pool App Client should be created. 
+
+The list of Enabled Identity Providers should include at least Cognito.
+
+SignIn and Signout Providers will need to be defined but can only be filled in
+once the lex-web-ui has been deployed. 
+
+The callback URLs is the URL to your application. The sample pages using CloudFormation
+setup are deployed to S3 however your setup may be different. The default scripts use
+?loggedin=yes and ?loggedout=yes. These portions of the URL should not be modified
+
+```
+https://YOURS3BUCKET.s3.amazonaws.com/index.html?loggedin=yes, https://YOURS3BUCKET.s3.amazonaws.com/parent.html?loggedin=yes
+```
+The signout URLs will look something like
+```
+https://YOURS3BUCKET.s3.amazonaws.com/index.html?loggedout=yes, https://YOURS3BUCKERT.s3.amazonaws.com/parent.html?loggedout=yes
+```
+The initial portion of the URL will need to be modified to match the domain where the web app
+is being deployed.
+
+You may also need to add to this comma separated list should the top level page be something other
+than idnex.html or parent.html. 
+
+Allowed OAuth Flows: Authorization code grant
+
+Allowed OAuth Scopes: phone, email, openid, profile
+
+3. A Domain Name should be created
+
+#### Modify lex-web-ui-loader-config.json 
+
+Once the IdentityPool and UserPool are fully configured, modify the 
+lex-web-ui-loader-config.json file to contain the appropriate values from the AWS
+Identity and User Pool Resources. These must be provided if the enableLogin has 
+been set to true. 
+
+```
+  "cognito": {
+    "poolId": "The-Identity-Pool-Id",
+    "appUserPoolClientId": "The-User-Pool-Client-Id ",
+    "appUserPoolName": "The-User-Pool-Name",
+    "appDomainName": "TheAppDomainCreated.auth.us-east-1.amazoncognito.com",
+    "appUserPoolIdentityProvider": ""
+  },
+```
+The last property, appUserPoolIdentityProvider can be used to target a specific IdentityProvider
+defined in the Identity Pool. If provided, the Cognito Hosted Login will redirect 
+directly to this SSO provider bypassing any of the Cognito Hosted Login pages. The 
+default is to leave this property empty and utilize the hosted login page. 
 
 ## Voice Support
 Users can interact with the bot using voice on compatible browsers.
@@ -193,14 +342,44 @@ NOTE: browsers may require the application to be served using HTTPS for
 the WebRTC API to work. Make sure to serve the application from an HTTPS
 enabled server or if hosting on S3 or CloudFront, use https in the URL.
 
+## Sound Effects
+You can enable sound effects when a message is sent or received. This
+feature also enables a sound button in the toolbar that can be used to
+mute the sound effects.
+```
+  "ui": {
+    "enableSFX": true,
+    // uri to sound files
+    "messageSentSFX": "sent.mp3",
+    "messageReceivedSFX": "received.mp3",
+  }
+```
+
 ## Markdown and HTML Support 
-The chatbot UI supports HTML and Markdown in bot responses. Markdown is rendered to HTML using [marked](https://www.npmjs.com/package/marked) and then displayed to the user. To do this you must configure the chat UI and have your bot place the HTML and/or Markdown messages the response message's session attributes 
+The chatbot UI supports HTML and Markdown in bot responses. Markdown can be provided in
+one of two methods. 
 
-First, set the `ui.AllowSuperDangerousHTMLInMessage` config field to `true`. __WARNING__: Enabling this feature increases the risk of XSS. Make sure that the HTML/Markdown message has been properly escaped/encoded/filtered in the Lex Handler Lambda function. For more information on XSS see [here](https://www.owasp.org/index.php/Cross-site_Scripting_(XSS))
+First, Lex added support for Markdown using the new CustomPayload 
+features available in the AWS Lex Console. The lex-web-ui will render Markdown supplied as
+a CustomPayload. 
 
-Second, program you lambda function to provide your Markdown and HTML messages as alt-messages in the session attribute `appContext.altMessages`. For example your session attribute could look like this or markdown messages:
+Second, the lex-web-ui will render Markdown supplied via the 
+appContext.altMessages.markdown attribute described below. This method was previously 
+supported by the lex-web-ui and will supported going forward. However, the native Lex
+capability is the recommended approach for supplying Markdown. 
 
-```json
+Markdown is rendered to 
+HTML using [marked](https://www.npmjs.com/package/marked) and then displayed to the 
+user. To do this you must configure the chat UI and have your bot place the HTML 
+and/or Markdown messages the response message's session attributes.
+
+To utilize the second approach configure and use the following:
+
+* Set the `ui.AllowSuperDangerousHTMLInMessage` config field to `true`. __WARNING__: Enabling this feature increases the risk of XSS. Make sure that the HTML/Markdown message has been properly escaped/encoded/filtered in the Lex Handler Lambda function. For more information on XSS see [here](https://www.owasp.org/index.php/Cross-site_Scripting_(XSS))
+
+* Program you lambda function to provide your Markdown and HTML messages as alt-messages in the session attribute `appContext.altMessages`. For example your session attribute could look like this or markdown messages:
+
+```
 {
     "appContext":{
         "altMessages":{
@@ -212,7 +391,7 @@ Second, program you lambda function to provide your Markdown and HTML messages a
 
 or this for html messages:
 
-```json
+```
 {
     "appContext":{
         "altMessages":{
@@ -222,7 +401,49 @@ or this for html messages:
 }
 ```
 
-If both Markdown and HTML are present then the HTML answer will be rendered. The message returned from lex will not be shown if an alternative answer is found. 
+The following priority exists for Markdown or Html content supplied in any of the two 
+methods. Highest priority first.
+
+1. All Lex based CustomPayloads will override any values found in appContext.altMessages.
+2. HTML provided via appContext.altMessages
+3. Markdown provided via appContext.altMessages 
+
+The standard message returned from Lex will not be shown if any content exists from any of Markdown
+or HTML mechanisms. 
+
+## Controlling the bot's input focus
+The Lex Web UI allows the user to input text and hit CR to send the request to the bot. Alternatively the user
+can enter text and press the Send button to send in the request. Finally the user can click on buttons provided in 
+response cards as a mechanism to generate a request. 
+
+Starting with version 0.14.5 of the Lex Web UI, each of these will return the browser's input focus back 
+input text area. In prior versions, when clicking on the Send button the user was required to click back in the 
+input text area for the next request. This version will resolve this problem. 
+
+In addition, a new optional attribute defined in the configuration json directs the browser to set the input
+focus to the chat bot when the page is first loaded or refreshed. This attribute is called 'directFocusToBotInput'.
+Set this value to true in lex-web-ui-loader-config.json to instruct the input focus to be placed in the bot after
+page load. A value of false preserves the prior behavior where the input focus will not be directed to the bot. 
+
+### New UI Features
+New features in this version include feedback buttons inside the message bubble and a help button located on the toolbar of the UI.  These features are optional and can be included by using the settings helpIntent, positiveFeedbackIntent and negativeFeedbackIntent.  To enable the help button provide a value for "helpIntent".  Enable the feedback buttons by adding a value to both positive and negative intents.  This value will be what is sent to the bot when the buttons are pressed.
+
+```
+  "ui": {
+    "parentOrigin": "",
+    "toolbarTitle": "Order Flowers",
+    "toolbarLogo": "",
+    "helpIntent": "",
+    "positiveFeedbackIntent": "",
+    "negativeFeedbackIntent": "",
+    "enableLogin": false,
+    "AllowSuperDangerousHTMLInMessage": false,
+    "shouldDisplayResponseCardTitle": false,
+    "pushInitialTextOnRestart": false,
+    "directFocusToBotInput": true
+  },
+
+```
 
 ## Configuration and Customization
 The chatbot UI requires configuration parameters pointing to external
@@ -328,7 +549,7 @@ like this:
 `https://mybucket.s3.amazonaws.com/index.html#/?lexWebUiconfig=%7B%22lex%22%3A%7B%22initialText%22%3A%22Ask%20me%20a%20question%22%7D%7D`
 
 You can encode the `lexWebUiConfig` URL parameter like this:
-```javascript
+```
 var lexWebUiConfig = JSON.stringify({
   lex: {
     initialText: 'Ask me a question',
@@ -400,7 +621,7 @@ using session attributes in the `appContext.responseCard` key of the
 can be used in a Lambda code hook to add a responseCard in a postContent
 API call:
 
-```python
+```
 response['sessionAttributes']['appContext'] =
     json.dumps({'responseCard': response_card})
 ```

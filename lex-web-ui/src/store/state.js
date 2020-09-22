@@ -1,5 +1,5 @@
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at
@@ -37,6 +37,8 @@ export default {
     slots: {},
   },
   messages: [],
+  utteranceStack: [],
+  isBackProcessing: false,
   polly: {
     outputFormat: 'ogg_vorbis',
     voiceId: (
@@ -64,7 +66,13 @@ export default {
   },
 
   isRunningEmbedded: false, // am I running in an iframe?
+  isSFXOn: (config.ui) ? (!!config.ui.enableSFX &&
+    !!config.ui.messageSentSFX && !!config.ui.messageReceivedSFX) : false,
   isUiMinimized: false, // when running embedded, is the iframe minimized?
+  isEnableLogin: false, // true when a login/logout menu should be displayed
+  isLoggedIn: false, // when running with login/logout enabled
+  hasButtons: false, // does the response card have buttons?
+  tokens: {},
   config,
 
   awsCreds: {

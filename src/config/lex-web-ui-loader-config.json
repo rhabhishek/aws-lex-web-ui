@@ -1,17 +1,40 @@
 {
+  "region": "us-east-1",
   "cognito": {
-    "poolId": ""
+    "poolId": "",
+    "appUserPoolClientId": "",
+    "appUserPoolName": "",
+    "appDomainName": "",
+    "aws_cognito_region": "us-east-1",
+    "region": "us-east-1",
+    "appUserPoolIdentityProvider": ""
   },
   "lex": {
-    "botName": "OrderFlowers",
-    "initialText": "You can ask me for help ordering flowers. Just type \"Buy flowers\" or click on the mic and say it.",
-    "initialSpeechInstruction": "Say 'Buy Flowers' to get started."
+    "botName": "",
+    "botAlias": "$LATEST",
+    "initialText": "",
+    "initialSpeechInstruction": "",
+    "reInitSessionAttributesOnRestart": false,
+    "region": "us-east-1"
   },
   "ui": {
     "parentOrigin": "",
-    "toolbarTitle": "Order Flowers",
+    "toolbarTitle": "Order Config",
     "toolbarLogo": "",
-    "pushInitialTextOnRestart": false
+    "positiveFeedbackIntent": "",
+    "negativeFeedbackIntent": "",
+    "helpIntent": "help",
+    "minButtonToolTipContent": "Open Chatbot",
+    "enableLogin": false,
+    "AllowSuperDangerousHTMLInMessage": true,
+    "shouldDisplayResponseCardTitle": false,
+    "hideInputFieldsForButtonResponse": false,
+    "pushInitialTextOnRestart": false,
+    "directFocusToBotInput": false,
+    "showDialogStateIcon": false,
+    "backButton": false,
+    "messageMenu": true,
+    "hideButtonMessageBubble": false
   },
   "polly": {
     "voiceId": "Salli"
@@ -21,7 +44,7 @@
   },
   "iframe": {
     "iframeOrigin": "",
-    "iframeSrcPath": "/index.html#/?lexWebUiEmbed=true",
-    "shouldLoadIframeMinimized": true
+    "shouldLoadIframeMinimized": false,
+    "iframeSrcPath": "/index.html#/?lexWebUiEmbed=true"
   }
 }

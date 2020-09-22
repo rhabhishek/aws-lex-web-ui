@@ -1,5 +1,5 @@
 /*
- Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
  Licensed under the Amazon Software License (the "License"). You may not use this file
  except in compliance with the License. A copy of the License is located at
@@ -77,7 +77,7 @@ const configDefault = {
 
     // controls if the session attributes are reinitialized a
     // after the bot dialog is done (i.e. fail or fulfilled)
-    reInitSessionAttributesOnRestart: true,
+    reInitSessionAttributesOnRestart: false,
 
     // TODO move this config fields to converser
     // allow to interrupt playback of lex responses by talking over playback
@@ -123,8 +123,20 @@ const configDefault = {
     // to allow runing embedded in a single origin setup
     parentOrigin: null,
 
+    // enable Sound Effects
+    enableSFX: false,
+
+    // mp3 audio file url for message send sound FX
+    messageSentSFX: 'send.mp3',
+
+    // mp3 audio file url for message received sound FX
+    messageReceivedSFX: 'received.mp3',
+
     // chat window text placeholder
     textInputPlaceholder: 'Type here or click on the mic',
+
+    // text shown when you hover over the minimized bot button
+    minButtonToolTipContent: 'Chatbot',
 
     toolbarColor: 'red',
 
@@ -165,6 +177,19 @@ const configDefault = {
     // Show the diaglog state icon, check or alert, in the text bubble
     showDialogStateIcon: true,
 
+    // Hide the message bubble on a response card button press
+    hideButtonMessageBubble: false,
+
+    // shows a thumbs up and thumbs down button which can be clicked
+    positiveFeedbackIntent: '',
+    negativeFeedbackIntent: '',
+
+    // shows a help button on the toolbar when true
+    helpIntent: '',
+
+    // for instances when you only want to show error icons and feedback
+    showErrorIcon: true,
+
     // Allows lex messages with session attribute
     // appContext.altMessages.html or appContext.altMessages.markdown
     // to be rendered as html in the message
@@ -172,7 +197,20 @@ const configDefault = {
     // Make sure that the HTML message has been properly
     // escaped/encoded/filtered in the Lambda function
     // https://www.owasp.org/index.php/Cross-site_Scripting_(XSS)
-    AllowSuperDangerousHTMLInMessage: false,
+    AllowSuperDangerousHTMLInMessage: true,
+
+    // Lex webui should display response card titles. The response card
+    // title can be optionally disabled by setting this value to false
+    shouldDisplayResponseCardTitle: true,
+
+    // Controls whether response card buttons are disabled after being clicked
+    shouldDisableClickedResponseCardButtons: true,
+
+    // Optionally display login menu
+    enableLogin: false,
+
+    // Optionally direct input focus to Bot text input as needed
+    directFocusToBotInput: false,
   },
 
   /* Configuration to enable voice and to pass options to the recorder

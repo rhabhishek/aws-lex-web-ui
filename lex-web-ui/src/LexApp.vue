@@ -11,7 +11,7 @@
 
 <script>
 /*
-Copyright 2017-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2017-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file
 except in compliance with the License. A copy of the License is located at
@@ -27,6 +27,7 @@ License for the specific language governing permissions and limitations under th
 import Vue from 'vue';
 import Vuex from 'vuex';
 import Vuetify from 'vuetify';
+// import VueMask from 'v-mask';
 
 import Page from '@/components/Page';
 import { Loader as LexWebUi } from '@/lex-web-ui';
@@ -59,6 +60,7 @@ function getFavIcon() {
 
 Vue.use(Vuex);
 Vue.use(Vuetify);
+// Vue.use(VueMask);
 
 const lexWebUi = new LexWebUi({
   ui: {

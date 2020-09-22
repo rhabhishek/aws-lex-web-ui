@@ -1,9 +1,9 @@
 {
   "cognito": {
-    "poolId": ""
+    "poolId": "us-east-1:0cd403d3-76c0-40d0-9d60-afb02bfcb8ff"
   },
   "lex": {
-    "botName": "WebUiOrderFlowers",
+    "botName": "OrderFlowers",
     "initialText": "You can ask me for help ordering flowers. Just type \"order flowers\" or click on the mic and say it.",
     "initialSpeechInstruction": "Say 'Order Flowers' to get started."
   },
@@ -12,10 +12,24 @@
   },
   "ui": {
     "parentOrigin": "http://localhost:8080",
-    "pageTitle": "Order Flowers Bot",
-    "toolbarTitle": "Order Flowers"
+    "pageTitle": "Order Config Bot",
+    "toolbarTitle": "Order Config",
+    "enableLogin": true,
+    "pushInitialTextOnRestart": false,
+    "shouldDisplayResponseCardTitle": false,
+    "showErrorIcon": true,
+    "showDialogStateIcon": false,
+    "positiveFeedbackIntent": "Thumbs up",
+    "negativeFeedbackIntent": "Thumbs down",
+    "helpIntent": "help",
+    "hideInputFieldsForButtonResponse": true,
+    "backButton": false,
+    "messageMenu": true
   },
   "recorder": {
     "preset": "speech_recognition"
+  },
+  "iframe": {
+    "shouldLoadIframeMinimized": false
   }
 }
